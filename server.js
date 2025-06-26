@@ -1,29 +1,40 @@
 const express = require('express');
 const cors = require('cors');
+const mongoose = require('mongoose');
 
 console.log('Starting server...');
 console.log('Express:', express ? 'Loaded' : 'Not found');
 console.log('Cors:', cors ? 'Loaded' : 'Not found');
+console.log('Mongoose:', mongoose ? 'Loaded' : 'Not found');
 
 const app = express();
 const PORT = process.env.PORT || 5000; // Default to 5000 or environment variable
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/destinationsDB';
 
 // Middleware
 app.use(express.json());
 app.use(cors()); // Enable CORS
 
-// In-memory storage for destinations
-let destinations = [
-  { id: 1, name: 'Tokyo', budget: 1500, travelTime: 15, route: 'New Delhi to Tokyo via Singapore' },
-  { id: 2, name: 'Paris', budget: 1200, travelTime: 12, route: 'New Delhi to Paris via Dubai' },
-];
+// Connect to MongoDB
+mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
-console.log('Initial destinations:', destinations);
+// Define destination schema and model
+const destinationSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  budget: { type: Number, required: true },
+  travelTime: { type: Number, required: true },
+  route: { type: String, required: true },
+}, { timestamps: true });
+
+const Destination = mongoose.model('Destination', destinationSchema);
 
 // Get all destinations
-app.get('/api/destinations', (req, res) => {
+app.get('/api/destinations', async (req, res) => {
   try {
     console.log('GET /api/destinations requested');
+    const destinations = await Destination.find();
     res.json(destinations);
   } catch (error) {
     console.error('Error in GET /api/destinations:', error);
@@ -32,23 +43,24 @@ app.get('/api/destinations', (req, res) => {
 });
 
 // Add a new destination
-app.post('/api/destinations', (req, res) => {
+app.post('/api/destinations', async (req, res) => {
   try {
     console.log('POST /api/destinations requested with body:', req.body);
     const { name, budget, travelTime, route } = req.body;
     if (!name || !budget || !travelTime || !route) {
       return res.status(400).json({ error: 'All fields are required' });
     }
-    const newDestination = {
-      id: Date.now(),
+
+    const newDestination = new Destination({
       name,
       budget: parseInt(budget),
       travelTime: parseInt(travelTime),
       route,
-    };
-    destinations.push(newDestination);
-    console.log('New destination added:', newDestination);
-    res.status(201).json(newDestination);
+    });
+
+    const savedDestination = await newDestination.save();
+    console.log('New destination added:', savedDestination);
+    res.status(201).json(savedDestination);
   } catch (error) {
     console.error('Error in POST /api/destinations:', error);
     res.status(500).json({ error: 'Failed to add destination' });
